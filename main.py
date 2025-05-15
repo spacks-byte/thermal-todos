@@ -50,8 +50,8 @@ linebreak = "----------------"
 
 api_url = "tick tick api url"
 api_key = "???"
-tick_client_id = "uSo6C45l19jMGuN0Km"
-tick_client_secret = "qqL&nTD)CiK4XLs55(iLHmbSau5(k+*9"
+tick_client_id = "client id"
+tick_client_secret = "client secret"
 
 response2 = requests.get(api_url)
 response2.json()
