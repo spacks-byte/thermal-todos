@@ -7,6 +7,7 @@ from escpos.printer import Usb
 import time
 import os
 import os.path
+from dotenv import load_dotenv
 from google.auth.transport.requests import Request
 from google.oauth2.credentials import Credentials
 from google_auth_oauthlib.flow import InstalledAppFlow
@@ -17,13 +18,15 @@ from googleapiclient.errors import HttpError
 # If modifying these scopes, delete the file token.json.
 SCOPES = ['https://www.googleapis.com/auth/tasks.readonly']
 
+# Load environment variables
+load_dotenv()
 
 def get_weather():
    # Bristol Latitude & Longitude
    lat = 51.4545
    lon = -2.5879
 
-   WEATHER_API_KEY = "REMOVED_WEATHER_API_KEY"
+   WEATHER_API_KEY = os.getenv('WEATHER_API_KEY')
    WEATHER_URL = f"https://api.openweathermap.org/data/2.5/weather?lat={lat}&lon={lon}&appid={WEATHER_API_KEY}&units=metric"
 
    response = requests.get(WEATHER_URL)
@@ -52,7 +55,7 @@ def get_news():
    query_params = {
       "language": "en",
       "category": "technology",
-      "apiKey": "REMOVED_NEWS_API_KEY"
+      "apiKey": os.getenv('NEWS_API_KEY')
    }
 
    response = requests.get(api_url, params=query_params)
