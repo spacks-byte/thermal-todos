@@ -1,98 +1,176 @@
+#!/usr/bin/env python3
+
+from __future__ import print_function
 import requests
 from datetime import datetime
 from escpos.printer import Usb
-import qrcode
-import json
-import textwrap
+import time
 import os
+import os.path
+from google.auth.transport.requests import Request
+from google.oauth2.credentials import Credentials
+from google_auth_oauthlib.flow import InstalledAppFlow
+from googleapiclient.discovery import build
+from googleapiclient.errors import HttpError
 
 
-# -------------------------- Weekday and Date --------------------------
-
-dt = datetime.now()
-days_of_week = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
-
-# Try out different formatting options for strftime :)
-weekday = days_of_week[int(dt.weekday())]
-date = dt.strftime("%d/%m/%Y")
-
-# -------------------------- Weather API Call --------------------------
-
-WEATHER_BASE_URL = "https://api.openweathermap.org/data/2.5/weather?"
-CITY = "Bristol"
-API_KEY = "Your API Key"
-
-WEATHER_URL = WEATHER_BASE_URL + "q=" + CITY + "&appid=" + API_KEY
-
-response = requests.get(WEATHER_URL)
-
-if response.status_code == 200:
-   data = response.json()
-   main = data['main']
-   temperature = main['temp']
-   humidity = main['humidity']
-   pressure = main['pressure']
-
-   report = data['weather']
-   print(f"{CITY:-^30}")
-   print(f"Temperature: {temperature}")
-   print(f"Humidity: {humidity}")
-   print(f"Pressure: {pressure}")
-   print(f"Weather Report: {report[0]['description']}")
-else:
-   print("Error in the HTTP request")
-
-# ---------------------------- Linebreak add ----------------------------
-
-linebreak = "----------------"
-
-# -------------------------- TickTick API Call --------------------------
-
-api_url = "tick tick api url"
-api_key = "???"
-tick_client_id = "uSo6C45l19jMGuN0Km"
-tick_client_secret = "qqL&nTD)CiK4XLs55(iLHmbSau5(k+*9"
-
-response2 = requests.get(api_url)
-response2.json()
-
-# ---------------------------- Linebreak add ----------------------------
-
-linebreak = "----------------"
-
-# ---------------------------- News API Call ----------------------------
-
-api_url = "news api url"
-api_key = "???"
-
-response3 = requests.get(api_url)
-response3.json()
-
-# ---------------------------- Print It Out! ----------------------------
-
-# 0x416 and 0x5011 are the details we extracted from lsusb
-# 0x81 and 0x03 are the bEndpointAddress for input and output
-p = Usb(0x416, 0x5011, in_ep=0x81, out_ep=0x03, profile="POS-5890")
-
-# Create and print a QR code or other image
-# qr = qrcode.make('https://arnon.dk')
-# qr.save('qrcode.png')
-# Print the qr or other image
-# p.image('qrcode.png')
-
-# Print out the text
-# p.text("Hello world!\n")
-# p.text("This print should work!\n")
-# p.text("---------------\n\n\n")
-
-printer = open("print.txt", "w")
-
-printer.write("Australian News\n\n")
-
-for article in response.json()['articles'][:headlines]:
-    news = str(article['title'])
-    news = textwrap.fill(news,20)
-    printer.write(str(news) + "\n\n")
+# If modifying these scopes, delete the file token.json.
+SCOPES = ['https://www.googleapis.com/auth/tasks.readonly']
 
 
-printer.close()
+def get_weather():
+   # Bristol Latitude & Longitude
+   lat = 51.4545
+   lon = -2.5879
+
+   WEATHER_API_KEY = "REMOVED_WEATHER_API_KEY"
+   WEATHER_URL = f"https://api.openweathermap.org/data/2.5/weather?lat={lat}&lon={lon}&appid={WEATHER_API_KEY}&units=metric"
+
+   response = requests.get(WEATHER_URL)
+
+   return_dictionary = {}
+   if response.status_code == 200:
+      data = response.json()
+      report = data['weather']
+      main = data['main']
+
+      return_dictionary["condition"] = f"{report[0]['description']}"
+      return_dictionary["temperature"] = main['temp']
+      return_dictionary["humidity"] = main['humidity']
+      return_dictionary["pressure"] = main['pressure']
+      return_dictionary["icon"] = f"{report[0]['icon'][:2]}"
+      return_dictionary["city"] = f"{data['name']}"
+   else:
+      print("Error in the HTTP request 1")
+      print(response.status_code)
+
+   return return_dictionary
+
+
+def get_news():
+   api_url = "https://newsapi.org/v2/top-headlines"
+   query_params = {
+      "language": "en",
+      "category": "technology",
+      "apiKey": "REMOVED_NEWS_API_KEY"
+   }
+
+   response = requests.get(api_url, params=query_params)
+   
+   return_list= []
+   if response.status_code == 200:
+      data = response.json()["articles"]
+      articles = data[:3]
+
+      for article in articles:
+         return_list.append(article["title"])
+   else:
+      print("Error in the HTTP request 1")
+      print(response.status_code)
+
+   return return_list
+
+
+def tasks_api():
+   """Shows basic usage of the Tasks API.
+   Prints the title and ID of the first 10 task lists.
+   """
+   creds = None
+   # The file token.json stores the user's access and refresh tokens, and is
+   # created automatically when the authorization flow completes for the first
+   # time.
+   if os.path.exists('/home/spacks/thermal-todos/token.json'):
+      creds = Credentials.from_authorized_user_file('/home/spacks/thermal-todos/token.json', SCOPES)
+   # If there are no (valid) credentials available, let the user log in.
+   if not creds or not creds.valid:
+      if creds and creds.expired and creds.refresh_token:
+         creds.refresh(Request())
+      else:
+         flow = InstalledAppFlow.from_client_secrets_file(
+               '/home/spacks/thermal-todos/client_secret.json', SCOPES)
+         creds = flow.run_local_server(port=0)
+      # Save the credentials for the next run
+      with open('/home/spacks/thermal-todos/token.json', 'w') as token:
+         token.write(creds.to_json())
+
+   returned_tasks = {}
+
+   try:
+      service = build('tasks', 'v1', credentials=creds)
+
+      # Call the Tasks API
+      results = service.tasklists().list(maxResults=10).execute()
+      items = results.get('items', [])
+
+      if not items:
+         print('No task lists found.')
+         return
+
+      for item in items:
+         list_id = item['id']
+         # Get tasks from list
+         tasks = service.tasks().list(tasklist=list_id).execute()
+         task_list = []
+         for task in tasks['items']:
+            task_list.append([task['title']])
+         if len(task_list) > 0:
+            returned_tasks[f"{item['title']}"] = task_list
+
+   except HttpError as err:
+      print(err)
+
+   return returned_tasks
+
+
+def center_string(text):
+   linelen = 32
+   return (" " * int((linelen-len(text))/2)) + text
+
+
+def main():
+   # -------------------------- Weekday and Date --------------------------
+   dt = datetime.now()
+   days_of_week = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
+
+   # Try out different formatting options for strftime :)
+   weekday = days_of_week[int(dt.weekday())]
+   date = dt.strftime("%d/%m/%Y")
+
+   # -------------------------- Weather API Call --------------------------
+   weather_report = get_weather()
+   # ------------------------ Google Tasks API Call ------------------------
+   tasks = tasks_api()
+   # ---------------------------- News API Call ----------------------------
+   news = get_news()
+   # ---------------------------- Print It Out! ----------------------------
+
+   # 0x456 and 0x0808 are the details we extracted from lsusb
+   # 0x81 and 0x03 are the bEndpointAddress for input and output
+   
+   p = Usb(0x456, 0x0808, in_ep=0x81, out_ep=0x03, profile="POS-5890")
+
+   # p.qr('https://www.youtube.com/watch?v=uHgt8giw1LY', size=8)
+
+   p.text(f"{center_string(weekday)}\n")
+   p.text(f"{center_string(date)}\n")
+   p.image(f"/home/spacks/thermal-todos/icons/{weather_report['icon']}d.png", impl="bitImageRaster")
+   p.text(f"{weather_report['city']}:\n")
+   p.text(f"Temperature: {weather_report['temperature']}°C\n")
+   p.text(f"Humidity: {weather_report['humidity']}%\n\n")
+   p.text(f"{center_string('------------------')}\n\n")
+   for tasklist in tasks:
+      p.text(f"{tasklist}:\n")
+      for task in tasks[tasklist]:
+         p.text(f"[ ] - {task[0]}\n")
+      p.text("\n")
+      
+   p.text(f"{center_string('------------------')}\n\n")
+   for newsheadline in news:
+      news_split = newsheadline.split(" - ")
+      p.text(f"{news_split[0]}\n")
+      p.text(f"- {news_split[1]}\n\n")
+
+   p.text("\n\n\n")
+
+if __name__ == '__main__':
+    main()
